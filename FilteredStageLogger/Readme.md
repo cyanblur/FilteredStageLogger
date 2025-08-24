@@ -4,15 +4,11 @@ A plugin that lists all the items that exist in a stage once you load in. Curren
 
 The mod will output the items in the console, (accessible in game with 'ctrl + alt + ~'), as well as create a ItemLogs.txt file next to the LogOutput.Log file.
 
-It lists items and the source, along with highlighting for sought-after items or item combos (ex. `Bundle of Fireworks & Remote Caffeinator` will highlight both items should they both appear).
+It lists items and the source, along with highlighting for sought-after items or item combos (ex. `Bundle of Fireworks & Remote Caffeinator` will highlight both items should they both appear on the stage).
 
 Configs for mod behaviors are available, use Risk_Of_Options for convenience.
 
 This mod is a cheat, it'll make the game easier because you know the items, but by default you are not shown the items unless you use `check_stage #`
-
-# Contact
-
-If this mod misbehaves
 
 # Changelogs
 
