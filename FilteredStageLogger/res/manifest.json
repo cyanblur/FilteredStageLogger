@@ -2,7 +2,7 @@
     "name": "FilteredStageLogger",
     "author": "cyanblur",
     "authorName": "cyanblur",
-    "version_number": "1.0.5",
+    "version_number": "1.0.6",
     "website_url": "https://github.com/cyanblur/FilteredStageLogger/tree/master/FilteredStageLogger",
     "description": "A small Risk of Rain 2 plugin that lists the items when prompted via the console",
     "dependencies": [

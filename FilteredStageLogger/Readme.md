@@ -12,6 +12,10 @@ This mod is a cheat, it'll make the game easier because you know the items, but 
 
 # Changelogs
 
+**1.0.6**
+
+- Disable console output config by default
+
 **1.0.5**
 
 - Added console command `check_stage #`

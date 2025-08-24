@@ -19,7 +19,7 @@ namespace FilteredStageLogger
         public const string PluginGUID = PluginAuthor + "." + PluginName;
         public const string PluginAuthor = "cyanblur";
         public const string PluginName = "FilteredStageLogger";
-        public const string PluginVersion = "1.0.5";
+        public const string PluginVersion = "1.0.6";
         public static readonly string path = $"{Assembly.GetExecutingAssembly().Location}/../../../ItemLogs.log";
 
         public static BepInEx.Configuration.ConfigEntry<LogLevel> logLevel { get; set; }
@@ -67,7 +67,7 @@ namespace FilteredStageLogger
             logOnlyOnCommand = Config.Bind<bool>(
                 "Functionality",
                 "Only log on command?",
-                false,
+                true,
                 $"If enabled, will only output items when the debug command {_description} is used"
             );
 
