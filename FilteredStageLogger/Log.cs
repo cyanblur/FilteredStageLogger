@@ -1,6 +1,6 @@
 ﻿using BepInEx.Logging;
 
-namespace ListItemLocations
+namespace FilteredStageLogger
 {
     internal static class Log
     {
