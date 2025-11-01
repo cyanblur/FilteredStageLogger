@@ -12,6 +12,13 @@ This mod is a cheat, it'll make the game easier because you know the items, but 
 
 # Changelogs
 
+**1.0.7**
+
+- Adaptive chests are fixed but not output by default, use the `adaptive` arg at the end of your command to list all the adaptive rewards as well
+- Alloy Worship Unit reward is tracked
+- Other realms on the same stage are retained. You can input an internal stage name after the stage number to select which stage you want to check. ex. `check_stage 4 meridian`
+- Chests that you've opened are tracked. Some multi-option outputs (multishops, shipping request, adaptive chests) mark the individual item, void potentials mark all 3 as opened
+
 **1.0.6**
 
 - Disable console output config by default
