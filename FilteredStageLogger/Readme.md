@@ -1,6 +1,6 @@
 ﻿# Filtered Stage Logger
 
-A plugin that lists all the items that exist in a stage once you load in. Currently, it does not list Casino Chests, AWU drops, or recycler rerolls. 
+A plugin that lists all the items that exist in a stage once you load in, or when prompted from the console. Recycler rolls, sale star, chance doll, and Halcyonite shrines are not tracked.
 
 The mod will output the items in the console, (accessible in game with 'ctrl + alt + ~'), as well as create a ItemLogs.txt file next to the LogOutput.Log file.
 
@@ -11,6 +11,14 @@ Configs for mod behaviors are available, use Risk_Of_Options for convenience.
 This mod is a cheat, it'll make the game easier because you know the items, but by default you are not shown the items unless you use `check_stage #`
 
 # Changelogs
+
+**1.0.9**
+
+- Teleporter and Mountain shrine loot tracked. If the boss turns out to be a horde of many and the log says Boss Item, be warned it WILL be incorrect.
+
+**1.0.8**
+
+- Description update
 
 **1.0.7**
 

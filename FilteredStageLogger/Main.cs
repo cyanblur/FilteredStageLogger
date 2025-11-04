@@ -7,7 +7,6 @@ using System;
 using System.Linq;
 using UnityEngine;
 using static RoR2.Console;
-using UnityEngine.SceneManagement;
 
 [assembly: HG.Reflection.SearchableAttribute.OptIn]
 
@@ -20,7 +19,7 @@ namespace FilteredStageLogger
         public const string PluginGUID = PluginAuthor + "." + PluginName;
         public const string PluginAuthor = "cyanblur";
         public const string PluginName = "FilteredStageLogger";
-        public const string PluginVersion = "1.0.7";
+        public const string PluginVersion = "1.0.9";
         public static readonly string path = $"{Assembly.GetExecutingAssembly().Location}/../../../ItemLogs.log";
 
         public static BepInEx.Configuration.ConfigEntry<LogLevel> logLevel { get; set; }
@@ -36,11 +35,13 @@ namespace FilteredStageLogger
         private static List<LocationInfo> locations = new();
         HashSet<int> alreadyLoggedObjs = new();
         private static int stagesLogged = -1;
-        private static Dictionary<int, Dictionary<string, List<string>>> stageItems = new();
-        private static Dictionary<int, Dictionary<string, List<LocationInfo>>> stageLocations = new();
+        //private static Dictionary<int, Dictionary<string, List<string>>> stageItems = new();
+        //private static Dictionary<int, Dictionary<string, List<LocationInfo>>> stageLocations = new();
         private static Dictionary<int, bool> loggedStages = new();
-        private static Dictionary<int, Dictionary<string, List<int>>> openedObjects = new();
+        //private static Dictionary<int, Dictionary<string, List<int>>> openedObjects = new();
         private static Dictionary<int, string> mainStage = new();
+        //private static Dictionary<int, Dictionary<string, int>> mountainShrineCount = new();
+        private static Dictionary<int, Dictionary<string, StageLogInformation>> stageInformation = new();
 
         public void Awake()
         {
@@ -127,6 +128,21 @@ namespace FilteredStageLogger
             On.RoR2.RouletteChestController.OnEnable += LogAdaptiveLoot;
             On.RoR2.RouletteChestController.HandleInteractionServer += AdaptiveOpened;
             On.RoR2.BossGroup.Awake += BossAwake;
+            On.RoR2.BossGroup.DropRewards += (o, s) =>
+            {
+                o(s);
+                MarkInteraction(s.gameObject.GetHashCode());
+            };
+            On.RoR2.ShrineBossBehavior.Start += (o, s) =>
+            {
+                o(s);
+                GetCurrentStageInfo().mountainShrineCount++;
+            };
+            On.RoR2.ShrineBossBehavior.AddShrineStack += (o, s, i) =>
+            {
+                o(s, i);
+                GetCurrentStageInfo().mountainShrinesHit++;
+            };
             SceneDirector.onPostPopulateSceneServer += FinalEvent;
 
             Log.LogDebug(PluginGUID + " Awake Done");
@@ -219,7 +235,7 @@ namespace FilteredStageLogger
         {
             secondaryItemListSplit = secondaryItemList.Value.Split(',').ToList();
             primaryItemListSplit = primaryItemList.Value.Split(',').ToList();
-            if (!stageLocations.ContainsKey(stage) || stageLocations[stage] == null || stageLocations[stage].Count == 0)
+            if (!stageInformation.ContainsKey(stage) || stageInformation[stage] == null || stageInformation[stage].Count == 0)
             {
                 Debug.LogError($"Stage {stage} not recorded.");
             }
@@ -230,14 +246,14 @@ namespace FilteredStageLogger
                 {
                     stageName = mainStage[stage];
                 }
-                if (!stageLocations[stage].ContainsKey(stageName))
+                if (!stageInformation[stage].ContainsKey(stageName))
                 {
-                    Debug.LogError($"{stageName} not recorded in stage {stage}. Stages found: {string.Join(", ", stageLocations[stage].Keys)}");
+                    Debug.LogError($"{stageName} not recorded in stage {stage}. Stages found: {string.Join(", ", stageInformation[stage].Keys)}");
                 }
                 else
                 {
                     bool notifyAdaptive = false;
-                    foreach (var location in stageLocations[stage][stageName])
+                    foreach (var location in stageInformation[stage][stageName].stageLocations)
                     {
                         if (location.objectType.StartsWith("CasinoChest") && !logAdaptive)
                         {
@@ -246,7 +262,7 @@ namespace FilteredStageLogger
                         }
                         try
                         {
-                            Debug.Log(location.GetDesiredColor(stageItems[stage][stageName], openedObjects[stage][stageName]));
+                            Debug.Log(location.GetDesiredColor(stageInformation[stage][stageName]));
                         }
                         catch (Exception e) { }
                     }
@@ -254,9 +270,9 @@ namespace FilteredStageLogger
                     {
                         Debug.Log($"Adaptive chests found but omitted from the log. Add the arg `adaptive` to your command to view.");
                     }
-                    if (stageLocations[stage].Keys.Count > 1)
+                    if (stageInformation[stage].Keys.Count > 1)
                     {
-                        Debug.Log($"Other stages found: {string.Join(", ", stageLocations[stage].Keys.Where(s => s != stageName))}");
+                        Debug.Log($"Other stages found: {string.Join(", ", stageInformation[stage].Keys.Where(s => s != stageName))}");
                     }
                 }
             }
@@ -269,22 +285,13 @@ namespace FilteredStageLogger
             if (saveToFile.Value) File.AppendAllText(path, $"\n\nNew Run Started at {DateTime.Now}");
 
             stagesLogged = -1;
-            stageItems = new Dictionary<int, Dictionary<string, List<string>>>();
-            stageLocations = new Dictionary<int, Dictionary<string, List<LocationInfo>>>();
+            stageInformation = new();
             loggedStages = new Dictionary<int, bool>();
         }
 
         private void BeginStage(On.RoR2.Run.orig_BeginStage orig, Run self)
         {
-            if (!stageLocations.ContainsKey(Run.instance.stageClearCount + 1))
-                stageLocations[Run.instance.stageClearCount + 1] = new();
-            stageLocations[Run.instance.stageClearCount + 1][SceneCatalog.currentSceneDef.baseSceneName] = new();
-            if (!stageItems.ContainsKey(Run.instance.stageClearCount + 1))
-                stageItems[Run.instance.stageClearCount + 1] = new();
-            stageItems[Run.instance.stageClearCount + 1][SceneCatalog.currentSceneDef.baseSceneName] = new();
-            if (!openedObjects.ContainsKey(Run.instance.stageClearCount + 1))
-                openedObjects[Run.instance.stageClearCount + 1] = new();
-            openedObjects[Run.instance.stageClearCount + 1][SceneCatalog.currentSceneDef.baseSceneName] = new();
+            InitStageInfo(Run.instance.stageClearCount + 1, SceneCatalog.currentSceneDef.baseSceneName);
             loggedStages[Run.instance.stageClearCount + 1] = false;
             mainStage[Run.instance.stageClearCount + 1] = SceneCatalog.currentSceneDef.baseSceneName;
 
@@ -292,13 +299,9 @@ namespace FilteredStageLogger
             orig(self);
         }
 
-        private static void MarkInteraction(int id)
+        private void MarkInteraction(int id)
         {
-            if (!openedObjects.ContainsKey(Run.instance.stageClearCount + 1))
-                openedObjects[Run.instance.stageClearCount + 1] = new();
-            if (!openedObjects[Run.instance.stageClearCount + 1].ContainsKey(SceneCatalog.currentSceneDef.baseSceneName))
-                openedObjects[Run.instance.stageClearCount + 1][SceneCatalog.currentSceneDef.baseSceneName] = new List<int>();
-            openedObjects[Run.instance.stageClearCount + 1][SceneCatalog.currentSceneDef.baseSceneName].Add(id);
+            GetCurrentStageInfo().openedObjects.Add(id);
         }
 
         private void GetMultishopItems(On.RoR2.ShopTerminalBehavior.orig_GenerateNewPickupServer orig, ShopTerminalBehavior self)
@@ -431,41 +434,73 @@ namespace FilteredStageLogger
             orig(self);
             RoR2Application.onNextUpdate += () =>
             {
-                if (self.name == "SuperRoboBallEncounter" && SceneManager.GetActiveScene().name == "shipgraveyard")
+                if (self.name == "SuperRoboBallEncounter")
                 {
                     ulong state0 = self.rng.state0, state1 = self.rng.state1;
                     Append("AlloyWorshipUnit", self.gameObject.GetHashCode(), self.dropTable.GenerateDrop(self.rng), self.gameObject.transform.position.x, self.gameObject.transform.position.y);
                     self.rng.state0 = state0;
                     self.rng.state1 = state1; // reset RNG
                 }
+                else if (self.name.Contains("Teleporter"))
+                {
+                    ulong state0 = self.rng.state0, state1 = self.rng.state1;
+                    var tpGreen = self.dropTable.GenerateDrop(self.rng);
+                    for (int i = 0; i < GetCurrentStageInfo().mountainShrineCount + 1; i++)
+                    {
+                        string source = "Teleporter";
+                        if (i > 0)
+                        {
+                            source = $"Mountain #{i}";
+                        }
+                        if (self.rng.nextNormalizedFloat < self.bossDropChance)
+                        {
+                            Append(source, self.gameObject.GetHashCode(), PickupCatalog.FindScrapIndexForItemTier(ItemTier.Boss), self.gameObject.transform.position.x, self.gameObject.transform.position.y);
+                        }
+                        else
+                        {
+                            Append(source, self.gameObject.GetHashCode(), tpGreen, self.gameObject.transform.position.x, self.gameObject.transform.position.y);
+                        }
+                    }
+                    self.rng.state0 = state0;
+                    self.rng.state1 = state1; // reset RNG
+                }
             };
         }
+
+
 
         private void FinalEvent(SceneDirector director)
         {
             RoR2Application.onNextUpdate += LogSomeData;
         }
 
+        private void InitStageInfo(int stageNumber, string stageName)
+        {
+            if (!stageInformation.ContainsKey(stageNumber))
+                stageInformation[stageNumber] = new();
+            if (!stageInformation[stageNumber].ContainsKey(stageName))
+                stageInformation[stageNumber][stageName] = new();
+        }
+
+        private StageLogInformation GetCurrentStageInfo()
+        {
+            InitStageInfo(Run.instance.stageClearCount + 1, SceneCatalog.currentSceneDef.baseSceneName);
+            return stageInformation[Run.instance.stageClearCount + 1][SceneCatalog.currentSceneDef.baseSceneName];
+        }
+
         private void Append(string name, int id, PickupIndex item, float x, float y)
         {
-            if (name == "ScavBackpack") // not tracked
+            if (name.StartsWith("ScavBackpack")) // not tracked
                 return;
             var loc = new LocationInfo(name, id, item, x, y);
             locations.Add(loc);
-            if (!stageLocations.ContainsKey(Run.instance.stageClearCount + 1))
-                stageLocations[Run.instance.stageClearCount + 1] = new();
-            if (!stageLocations[Run.instance.stageClearCount + 1].ContainsKey(SceneCatalog.currentSceneDef.baseSceneName))
-                stageLocations[Run.instance.stageClearCount + 1][SceneCatalog.currentSceneDef.baseSceneName] = new List<LocationInfo>();
-            stageLocations[Run.instance.stageClearCount + 1][SceneCatalog.currentSceneDef.baseSceneName].Add(loc);
+            var currentStage = stageInformation[Run.instance.stageClearCount + 1][SceneCatalog.currentSceneDef.baseSceneName];
+            currentStage.stageLocations.Add(loc);
 
             string itemString = loc.GetName();
-            if (!stageItems.ContainsKey(Run.instance.stageClearCount + 1))
-                stageItems[Run.instance.stageClearCount + 1] = new();
-            if (!stageItems[Run.instance.stageClearCount + 1].ContainsKey(SceneCatalog.currentSceneDef.baseSceneName))
-                stageItems[Run.instance.stageClearCount + 1][SceneCatalog.currentSceneDef.baseSceneName] = new List<string>();
             if (!name.StartsWith("CasinoChest"))
             {
-                stageItems[Run.instance.stageClearCount + 1][SceneCatalog.currentSceneDef.baseSceneName].Add(itemString);
+                currentStage.stageItems.Add(itemString);
             }
 
             try
@@ -473,7 +508,7 @@ namespace FilteredStageLogger
                 if (loggedStages.ContainsKey(Run.instance.stageClearCount + 1) && loggedStages[Run.instance.stageClearCount + 1])
                 {
                     if (saveToFile.Value) File.AppendAllText(path, "\n" + loc.AsString());
-                    if (!logOnlyOnCommand.Value) Debug.Log(loc.GetDesiredColor(stageItems[Run.instance.stageClearCount + 1][SceneCatalog.currentSceneDef.baseSceneName], openedObjects[Run.instance.stageClearCount + 1][SceneCatalog.currentSceneDef.baseSceneName]));
+                    if (!logOnlyOnCommand.Value) Debug.Log(loc.GetDesiredColor(currentStage));
                 }
             }
             catch (Exception e)
@@ -502,15 +537,15 @@ namespace FilteredStageLogger
                 nameToken = PickupCatalog.GetPickupDef(item)?.nameToken;
             }
 
-            public string GetDesiredColor(List<string> itemsOnStage, List<int> openedObjectIds)
+            public string GetDesiredColor(StageLogInformation stageInfo)
             {
-                string output = AsString(ObjectOpened(openedObjectIds));
+                string output = AsString(ObjectOpened(stageInfo));
 
-                if (ItemInList(primaryItemListSplit, itemsOnStage))
+                if (ItemInList(primaryItemListSplit, stageInfo.stageItems))
                 {
                     return $"<color=#{ColorUtility.ToHtmlStringRGBA(primaryItemColor.Value)}>{output}</color>";
                 }
-                else if (ItemInList(secondaryItemListSplit, itemsOnStage))
+                else if (ItemInList(secondaryItemListSplit, stageInfo.stageItems))
                 {
                     return $"<color=#{ColorUtility.ToHtmlStringRGBA(secondaryItemColor.Value)}>{output}</color>";
                 }
@@ -520,26 +555,32 @@ namespace FilteredStageLogger
                 }
             }
 
-            private bool ObjectOpened(List<int> openedObjectIds)
+            private bool ObjectOpened(StageLogInformation stageInfo)
             {
-                if(openedObjectIds != null && openedObjectIds.Contains(objectId))
+                if(stageInfo.openedObjects != null && stageInfo.openedObjects.Contains(objectId))
                 {
                     if (objectType.Contains("ShrineChance"))
                     {
-                        var shrineHits = openedObjectIds.Where(o => o == objectId).Count();
+                        var shrineHits = stageInfo.openedObjects.Where(o => o == objectId).Count();
                         int pos = -1;
                         int.TryParse(objectType.Split('#').Last(), out pos);
                         return (pos != -1 && shrineHits >= pos);
                     }
                     else if (objectType.Contains("CasinoChest"))
                     {
-                        var casinoRolls = openedObjectIds.Where(o => o == objectId).Count();
+                        var casinoRolls = stageInfo.openedObjects.Where(o => o == objectId).Count();
                         int pos = -1;
                         int.TryParse(objectType.Split('#').Last(), out pos);
                         if (casinoRolls == 1)   // the id is entered the first time the chest is interacted with
                             return (pos == 30); // if only 1 entry it ran to the end untouched
                         else
                             return (casinoRolls == pos + 1);
+                    }
+                    else if (objectType.Contains("Mountain"))
+                    {
+                        int pos = -1;
+                        int.TryParse(objectType.Split('#').Last(), out pos);
+                        return (pos <= stageInfo.mountainShrinesHit);
                     }
                     else
                     {
@@ -586,6 +627,11 @@ namespace FilteredStageLogger
             {
                 string ret = (nameToken is not null) ? $"{Language.GetString(nameToken)}" : "NON_ITEM"; // string format just name :racesR:
 
+                if (ret == "Item Scrap, Yellow")
+                {
+                    ret = "Boss Item";
+                }
+
                 if (logLevel.Value == LogLevel.OnlyItems)
                 {
                     return ret;
@@ -607,6 +653,24 @@ namespace FilteredStageLogger
                 }
 
                 return ret;
+            }
+        }
+
+        private class StageLogInformation
+        {
+            public List<string> stageItems;
+            public List<LocationInfo> stageLocations;
+            public List<int> openedObjects;
+            public int mountainShrineCount;
+            public int mountainShrinesHit;
+
+            public StageLogInformation()
+            {
+                stageItems = new List<string>();
+                stageLocations = new List<LocationInfo>();
+                openedObjects = new List<int>();
+                mountainShrineCount = 0;
+                mountainShrinesHit = 0;
             }
         }
 
