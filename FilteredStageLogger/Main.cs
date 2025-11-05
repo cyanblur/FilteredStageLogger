@@ -30,6 +30,8 @@ namespace FilteredStageLogger
         public static BepInEx.Configuration.ConfigEntry<string> secondaryItemList { get; set; }
         public static BepInEx.Configuration.ConfigEntry<Color> primaryItemColor { get; set; }
         public static BepInEx.Configuration.ConfigEntry<string> primaryItemList { get; set; }
+        public static BepInEx.Configuration.ConfigEntry<bool> useRarityItemColors { get; set; }
+
         private static List<string> secondaryItemListSplit = new List<string>();
         private static List<string> primaryItemListSplit = new List<string>();
         private static List<LocationInfo> locations = new();
@@ -101,6 +103,13 @@ namespace FilteredStageLogger
                 "Primary Item List",
                 "",
                 "List of items to mark as primary, comma separated. Use & to combine items."
+            );
+
+            useRarityItemColors = Config.Bind<bool>(
+                "Item List Settings",
+                "Use item rarity colors?",
+                true,
+                $"If enabled, the item name will show in the color of the tier it belongs to. This takes priority over item list colors, but those colors will still show on the item's location text."
             );
 
             File.WriteAllText(path, "Start Instance of new Game"); // "clear" text file
@@ -223,7 +232,7 @@ namespace FilteredStageLogger
 
             foreach (var loc in locations)
             {
-                file += "\n" + loc.AsString();
+                file += "\n" + loc.AsString(false, true);
             }
             if (!logOnlyOnCommand.Value) LogByStageNumber(stagesLogged + 1);
 
@@ -444,16 +453,32 @@ namespace FilteredStageLogger
                 else if (self.name.Contains("Teleporter"))
                 {
                     ulong state0 = self.rng.state0, state1 = self.rng.state1;
-                    var tpGreen = self.dropTable.GenerateDrop(self.rng);
+                    PickupIndex tpGreen = self.dropTable.GenerateDrop(self.rng);
+                    List<PickupDropTable> dropTable = new List<PickupDropTable>();
+                    dropTable.Add(self.dropTable);
+                    bool flag2 = dropTable != null && dropTable.Count > 0;
                     for (int i = 0; i < GetCurrentStageInfo().mountainShrineCount + 1; i++)
                     {
                         string source = "Teleporter";
                         if (i > 0)
                         {
                             source = $"Mountain #{i}";
+                            self.dropTable.GenerateDropPreReplacement(self.rng);
                         }
-                        if (self.rng.nextNormalizedFloat < self.bossDropChance)
+                        if (self.rng.nextNormalizedFloat <= self.bossDropChance)
                         {
+                            if (flag2)
+                            {
+                                PickupDropTable pickupDropTable = self.rng.NextElementUniform(dropTable);
+                                if (pickupDropTable != null)
+                                {
+                                    _ = pickupDropTable.GenerateDrop(self.rng);
+                                }
+                            }
+                            else
+                            {
+                                _ = self.rng.NextElementUniform(self.bossDrops);
+                            }
                             Append(source, self.gameObject.GetHashCode(), PickupCatalog.FindScrapIndexForItemTier(ItemTier.Boss), self.gameObject.transform.position.x, self.gameObject.transform.position.y);
                         }
                         else
@@ -623,13 +648,31 @@ namespace FilteredStageLogger
                 return false;
             }
 
-            public string AsString(bool opened = false)
+            public string AsString(bool opened = false, bool textOnly = false)
             {
-                string ret = (nameToken is not null) ? $"{Language.GetString(nameToken)}" : "NON_ITEM"; // string format just name :racesR:
+                string ret = "";
+                var itemName = (nameToken is not null) ? $"{Language.GetString(nameToken)}" : "NON_ITEM"; // string format just name :racesR:
 
-                if (ret == "Item Scrap, Yellow")
+                if (itemName == "Item Scrap, Yellow")
                 {
-                    ret = "Boss Item";
+                    itemName = "Boss Item";
+                }
+
+                if (useRarityItemColors.Value && !textOnly)
+                {
+                    var pickupDef = PickupCatalog.GetPickupDef(item);
+                    if (PickupCatalog.GetPickupDef(item).equipmentIndex == EquipmentIndex.None)
+                    {
+                        ret = $"<color=#{ColorUtility.ToHtmlStringRGBA(ColorCatalog.GetColor(ItemTierCatalog.GetItemTierDef(ItemCatalog.GetItemDef(pickupDef.itemIndex).tier).colorIndex))}>{itemName}</color>";
+                    }
+                    else
+                    {
+                        ret = $"<color=#{ColorUtility.ToHtmlStringRGBA(ColorCatalog.GetColor(EquipmentCatalog.GetEquipmentDef(pickupDef.equipmentIndex).colorIndex))}>{itemName}</color>";
+                    }
+                }
+                else
+                {
+                    ret = itemName;
                 }
 
                 if (logLevel.Value == LogLevel.OnlyItems)
@@ -649,7 +692,7 @@ namespace FilteredStageLogger
 
                 if (opened)
                 {
-                    ret += " (opened)";
+                    ret += $" <color=#{ColorUtility.ToHtmlStringRGBA(Color.green)}>(opened)</color>";
                 }
 
                 return ret;

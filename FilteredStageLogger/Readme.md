@@ -12,6 +12,12 @@ This mod is a cheat, it'll make the game easier because you know the items, but 
 
 # Changelogs
 
+**1.0.10**
+
+- Opened indicators are now colored green
+- Item names are now colored by tier. This can be disabled in the config. Items can still be highlighted with this on, but the highlight will only show on the item's location
+- Fixed mountain shrine simulation
+
 **1.0.9**
 
 - Teleporter and Mountain shrine loot tracked. If the boss turns out to be a horde of many and the log says Boss Item, be warned it WILL be incorrect.
