@@ -12,6 +12,11 @@ This mod is a cheat, it'll make the game easier because you know the items, but 
 
 # Changelogs
 
+**1.0.11**
+
+- If a multishop or shipping request terminal is opened without a card, the remaining slots are marked as (locked)
+- The `missing` arg can be used to filter out all opened, locked, printer, or cauldron entries. ex. `check_stage 2 missing`
+
 **1.0.10**
 
 - Opened indicators are now colored green

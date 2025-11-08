@@ -152,12 +152,17 @@ namespace FilteredStageLogger
                 o(s, i);
                 GetCurrentStageInfo().mountainShrinesHit++;
             };
+            On.RoR2.ShopTerminalBehavior.SetNoPickup += (o, s) =>
+            {
+                o(s);
+                GetCurrentStageInfo().closedObjects.Add(s.gameObject.GetHashCode());
+            };
             SceneDirector.onPostPopulateSceneServer += FinalEvent;
 
             Log.LogDebug(PluginGUID + " Awake Done");
         }
 
-        private const string _description = "`check_stage [stage_number] [stage_name] [adaptive]`";
+        private const string _description = "`check_stage [stage_number] [stage_name] [adaptive] [missing]`";
         [ConCommand(commandName = "check_stage", flags = ConVarFlags.None, helpText = _description)]
         public static void CheckStage(ConCommandArgs args)
         {
@@ -171,16 +176,22 @@ namespace FilteredStageLogger
             string stageName = null;
 
             bool logAdaptive = false;
+            bool onlyMissing = false;
             List<string> finalArgs = new List<string>();
             for (int i = 0; i < args.Count; i++)
             {
-                if (args.GetArgString(i) == "adaptive")
+                var arg = args.GetArgString(i);
+                if (arg == "adaptive")
                 {
                     logAdaptive = true;
                 }
+                else if(arg == "missing" || arg == "missed" || arg == "miss")
+                {
+                    onlyMissing = true;
+                }
                 else
                 {
-                    finalArgs.Add(args.GetArgString(i));
+                    finalArgs.Add(arg);
                 }
             }
 
@@ -202,7 +213,7 @@ namespace FilteredStageLogger
                 }
                 catch { }
             }
-            LogByStageNumber(stageNum, stageName, logAdaptive);
+            LogByStageNumber(stageNum, stageName, logAdaptive, onlyMissing);
         }
 
         public static void LogSomeData()
@@ -232,7 +243,7 @@ namespace FilteredStageLogger
 
             foreach (var loc in locations)
             {
-                file += "\n" + loc.AsString(false, true);
+                file += "\n" + loc.AsString(ContainerState.Untouched, true);
             }
             if (!logOnlyOnCommand.Value) LogByStageNumber(stagesLogged + 1);
 
@@ -240,7 +251,7 @@ namespace FilteredStageLogger
             locations.Clear();
         }
 
-        public static void LogByStageNumber(int stage, string stageName = null, bool logAdaptive = false)
+        public static void LogByStageNumber(int stage, string stageName = null, bool logAdaptive = false, bool onlyMissing = false)
         {
             secondaryItemListSplit = secondaryItemList.Value.Split(',').ToList();
             primaryItemListSplit = primaryItemList.Value.Split(',').ToList();
@@ -268,6 +279,11 @@ namespace FilteredStageLogger
                         {
                             notifyAdaptive = true;
                             continue;
+                        }
+                        if(onlyMissing)
+                        {
+                            if (location.GetContainerState(stageInformation[stage][stageName]) != ContainerState.Untouched)
+                                continue;
                         }
                         try
                         {
@@ -564,7 +580,7 @@ namespace FilteredStageLogger
 
             public string GetDesiredColor(StageLogInformation stageInfo)
             {
-                string output = AsString(ObjectOpened(stageInfo));
+                string output = AsString(GetContainerState(stageInfo));
 
                 if (ItemInList(primaryItemListSplit, stageInfo.stageItems))
                 {
@@ -580,39 +596,64 @@ namespace FilteredStageLogger
                 }
             }
 
-            private bool ObjectOpened(StageLogInformation stageInfo)
+            public ContainerState GetContainerState(StageLogInformation stageInfo)
             {
-                if(stageInfo.openedObjects != null && stageInfo.openedObjects.Contains(objectId))
+                if (stageInfo.openedObjects != null && stageInfo.openedObjects.Contains(objectId))
                 {
                     if (objectType.Contains("ShrineChance"))
                     {
                         var shrineHits = stageInfo.openedObjects.Where(o => o == objectId).Count();
                         int pos = -1;
                         int.TryParse(objectType.Split('#').Last(), out pos);
-                        return (pos != -1 && shrineHits >= pos);
+                        if (pos != -1 && shrineHits >= pos)
+                            return ContainerState.Opened;
                     }
                     else if (objectType.Contains("CasinoChest"))
                     {
                         var casinoRolls = stageInfo.openedObjects.Where(o => o == objectId).Count();
                         int pos = -1;
                         int.TryParse(objectType.Split('#').Last(), out pos);
-                        if (casinoRolls == 1)   // the id is entered the first time the chest is interacted with
-                            return (pos == 30); // if only 1 entry it ran to the end untouched
-                        else
-                            return (casinoRolls == pos + 1);
+                        if (casinoRolls == 1)
+                        {   // the id is entered the first time the chest is interacted with
+                            if (pos == 30) // if only 1 entry it ran to the end untouched
+                            {
+                                return ContainerState.Opened;
+                            }
+                        }
+                        else if (casinoRolls == pos + 1)
+                        {
+                            return ContainerState.Opened;
+                        }
+
+                        return ContainerState.CasinoUnpicked;
                     }
                     else if (objectType.Contains("Mountain"))
                     {
                         int pos = -1;
                         int.TryParse(objectType.Split('#').Last(), out pos);
-                        return (pos <= stageInfo.mountainShrinesHit);
+                        if (pos <= stageInfo.mountainShrinesHit)
+                        {
+                            return ContainerState.Opened;
+                        }
                     }
                     else
                     {
-                        return true;
+                        return ContainerState.Opened;
                     }
                 }
-                return false;
+                else if (stageInfo.closedObjects != null && stageInfo.closedObjects.Contains(objectId))
+                {
+                    return ContainerState.Closed;
+                }
+                else if (objectType.Contains("Duplicator"))
+                {
+                    return ContainerState.Printer;
+                }
+                else if (objectType.Contains("LunarCauldron"))
+                {
+                    return ContainerState.Cauldron;
+                }
+                return ContainerState.Untouched;
             }
 
             public string GetName()
@@ -648,7 +689,7 @@ namespace FilteredStageLogger
                 return false;
             }
 
-            public string AsString(bool opened = false, bool textOnly = false)
+            public string AsString(ContainerState containerState = ContainerState.Untouched, bool textOnly = false)
             {
                 string ret = "";
                 var itemName = (nameToken is not null) ? $"{Language.GetString(nameToken)}" : "NON_ITEM"; // string format just name :racesR:
@@ -690,11 +731,15 @@ namespace FilteredStageLogger
                     ret += $"           at ({x}, {y})";
                 }
 
-                if (opened)
+                if (containerState == ContainerState.Opened)
                 {
                     ret += $" <color=#{ColorUtility.ToHtmlStringRGBA(Color.green)}>(opened)</color>";
                 }
-
+                else if (containerState == ContainerState.Closed)
+                {
+                    ret += $" <color=#{ColorUtility.ToHtmlStringRGBA(Color.gray)}>(locked)</color>";
+                }
+                
                 return ret;
             }
         }
@@ -704,6 +749,7 @@ namespace FilteredStageLogger
             public List<string> stageItems;
             public List<LocationInfo> stageLocations;
             public List<int> openedObjects;
+            public List<int> closedObjects;
             public int mountainShrineCount;
             public int mountainShrinesHit;
 
@@ -712,6 +758,7 @@ namespace FilteredStageLogger
                 stageItems = new List<string>();
                 stageLocations = new List<LocationInfo>();
                 openedObjects = new List<int>();
+                closedObjects = new List<int>();
                 mountainShrineCount = 0;
                 mountainShrinesHit = 0;
             }
@@ -723,6 +770,16 @@ namespace FilteredStageLogger
             OnlyItems = 0,
             ItemsAndSources = 1,
             AllInfo = 2
+        }
+
+        public enum ContainerState
+        {
+            Untouched = -1,
+            Opened = 0,
+            Closed = 1,
+            Printer = 2,
+            Cauldron = 3,
+            CasinoUnpicked = 4,
         }
     }
 }
