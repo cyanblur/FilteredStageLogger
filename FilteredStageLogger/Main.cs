@@ -19,7 +19,7 @@ namespace FilteredStageLogger
         public const string PluginGUID = PluginAuthor + "." + PluginName;
         public const string PluginAuthor = "cyanblur";
         public const string PluginName = "FilteredStageLogger";
-        public const string PluginVersion = "1.0.9";
+        public const string PluginVersion = "1.0.12";
         public static readonly string path = $"{Assembly.GetExecutingAssembly().Location}/../../../ItemLogs.log";
 
         public static BepInEx.Configuration.ConfigEntry<LogLevel> logLevel { get; set; }
