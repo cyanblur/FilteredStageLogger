@@ -118,6 +118,7 @@ namespace FilteredStageLogger
             On.RoR2.Run.BeginStage += BeginStage;
             On.RoR2.ChestBehavior.Roll += LogChestRoll;
             On.RoR2.ChestBehavior.Open += ChestOpened;
+            On.RoR2.ChestBehavior.Start += LogScavLoot;
             On.RoR2.ShopTerminalBehavior.SetPickupIndex += SetPrinterIndex;
             On.RoR2.ShopTerminalBehavior.GenerateNewPickupServer += GetMultishopItems;
             On.RoR2.ShopTerminalBehavior.DropPickup += (o, s) =>
@@ -441,10 +442,69 @@ namespace FilteredStageLogger
         {
             orig(self);
 
+            if (self.gameObject.name.StartsWith("ScavBackpack"))
+                return;
+
             if (alreadyLoggedObjs.Contains(self.gameObject.GetHashCode())) return;
             else alreadyLoggedObjs.Add(self.gameObject.GetHashCode());
 
             Append(self.gameObject.name, self.gameObject.GetHashCode(), self.dropPickup, self.transform.position.x, self.transform.position.y);
+        }
+
+        private void LogScavLoot(On.RoR2.ChestBehavior.orig_Start orig,  ChestBehavior self)
+        {
+            orig(self);
+
+            if (!self.gameObject.name.StartsWith("ScavBackpack"))
+                return;
+
+            if (alreadyLoggedObjs.Contains(self.gameObject.GetHashCode())) return;
+            else alreadyLoggedObjs.Add(self.gameObject.GetHashCode());
+
+            ulong state0 = self.rng.state0, state1 = self.rng.state1;
+            for (int i = 0; i < 10; i++)
+            {
+                WeightedSelection<List<PickupIndex>> selector = new WeightedSelection<List<PickupIndex>>();
+                List<PickupIndex> sourceDropList = new List<PickupIndex> { PickupCatalog.FindPickupIndex(RoR2Content.MiscPickups.LunarCoin.miscPickupIndex) };
+                Add(Run.instance.availableTier1DropList, self.tier1Chance);
+                Add(Run.instance.availableTier2DropList, self.tier2Chance);
+                Add(Run.instance.availableTier3DropList, self.tier3Chance);
+                Add(Run.instance.availableLunarCombinedDropList, self.lunarChance);
+                Add(sourceDropList, self.lunarCoinChance);
+                List<PickupIndex> dropList = selector.Evaluate(self.rng.nextNormalizedFloat);
+                var dropPickup = self.rng.NextElementUniform(dropList);
+                Append(self.gameObject.name + " #" + (i+1), self.gameObject.GetHashCode(), dropPickup, self.transform.position.x, self.transform.position.y);
+                for (int j = 0; j < self.dropCount; j++)
+                {
+                    _ = self.dropTable.GenerateDrop(self.rng);
+                }
+
+                void Add(List<PickupIndex> source, float chance)
+                {
+                    if (!(chance <= 0f))
+                    {
+                        selector.AddChoice(source.Where(PassesFilter).ToList(), chance);
+                    }
+                }
+                bool PassesFilter(PickupIndex pickupIndex)
+                {
+                    if (self.requiredItemTag == ItemTag.Any)
+                    {
+                        return true;
+                    }
+                    PickupDef pickupDef = PickupCatalog.GetPickupDef(pickupIndex);
+                    if (pickupDef.itemIndex != ItemIndex.None)
+                    {
+                        return ItemCatalog.GetItemDef(pickupDef.itemIndex).ContainsTag(self.requiredItemTag);
+                    }
+                    return true;
+                }
+            }
+            for (int i = 0; i < 10; i++)
+            {
+            }
+            self.rng.state0 = state0;
+            self.rng.state1 = state1; // reset RNG
         }
 
         private void ChestOpened(On.RoR2.ChestBehavior.orig_Open orig, ChestBehavior self)
@@ -531,8 +591,6 @@ namespace FilteredStageLogger
 
         private void Append(string name, int id, PickupIndex item, float x, float y)
         {
-            if (name.StartsWith("ScavBackpack")) // not tracked
-                return;
             var loc = new LocationInfo(name, id, item, x, y);
             locations.Add(loc);
             var currentStage = stageInformation[Run.instance.stageClearCount + 1][SceneCatalog.currentSceneDef.baseSceneName];
