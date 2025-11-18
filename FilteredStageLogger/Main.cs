@@ -19,7 +19,7 @@ namespace FilteredStageLogger
         public const string PluginGUID = PluginAuthor + "." + PluginName;
         public const string PluginAuthor = "cyanblur";
         public const string PluginName = "FilteredStageLogger";
-        public const string PluginVersion = "1.0.12";
+        public const string PluginVersion = "1.1.0";
         public static readonly string path = $"{Assembly.GetExecutingAssembly().Location}/../../../ItemLogs.log";
 
         public static BepInEx.Configuration.ConfigEntry<LogLevel> logLevel { get; set; }
@@ -136,7 +136,7 @@ namespace FilteredStageLogger
             On.RoR2.ShrineChanceBehavior.Start += LogChanceShrineLoot;
             On.RoR2.ShrineChanceBehavior.AddShrineStack += ChanceHit;
             On.RoR2.RouletteChestController.OnEnable += LogAdaptiveLoot;
-            On.RoR2.RouletteChestController.HandleInteractionServer += AdaptiveOpened;
+            On.RoR2.RouletteChestController.HandleInteractionServer_PayCostContext_PayCostResults += AdaptiveOpened;
             On.RoR2.BossGroup.Awake += BossAwake;
             On.RoR2.BossGroup.DropRewards += (o, s) =>
             {
@@ -321,6 +321,7 @@ namespace FilteredStageLogger
             loggedStages[Run.instance.stageClearCount + 1] = false;
             mainStage[Run.instance.stageClearCount + 1] = SceneCatalog.currentSceneDef.baseSceneName;
 
+
             alreadyLoggedObjs.Clear();
             orig(self);
         }
@@ -337,25 +338,25 @@ namespace FilteredStageLogger
             if (alreadyLoggedObjs.Contains(self.gameObject.GetHashCode())) return;
             else alreadyLoggedObjs.Add(self.gameObject.GetHashCode());
 
-            if (self.pickupIndex.value == -1) return; // BAD_PICKUP_INDEX
+            if (self.Networkpickup.pickupIndex.value == -1) return; // BAD_PICKUP_INDEX
 
-            Append(self.gameObject.name, self.gameObject.GetHashCode(), self.pickupIndex, self.transform.position.x, self.transform.position.y);
+            Append(self.gameObject.name, self.gameObject.GetHashCode(), self.Networkpickup.pickupIndex, self.transform.position.x, self.transform.position.y);
         }
 
         private void LogOptionLoot(On.RoR2.OptionChestBehavior.orig_Roll orig, OptionChestBehavior self)
         {
             orig(self);
             int count = 1;
-            foreach (var itemPickup in self.generatedDrops)
+            foreach (var itemPickup in self.generatedPickups)
             {
-                Append(self.gameObject.name + $" #{count}", self.gameObject.GetHashCode(), itemPickup, self.gameObject.transform.position.x, self.gameObject.transform.position.y);
+                Append(self.gameObject.name + $" #{count}", self.gameObject.GetHashCode(), itemPickup.pickupIndex, self.gameObject.transform.position.x, self.gameObject.transform.position.y);
                 count++;
             }
         }
         
-        private void OpenedOption(On.RoR2.MultiShopController.orig_OnPurchase orig, MultiShopController self, Interactor interactor, PurchaseInteraction pi)
+        private void OpenedOption(On.RoR2.MultiShopController.orig_OnPurchase orig, MultiShopController self, CostTypeDef.PayCostContext payCostContext, CostTypeDef.PayCostResults payCostResult)
         {
-            orig(self, interactor, pi);
+            orig(self, payCostContext, payCostResult);
 
             MarkInteraction(self.gameObject.GetHashCode());
         }
@@ -372,7 +373,7 @@ namespace FilteredStageLogger
                 hits++;
                 if (self.rng.nextNormalizedFloat > self.failureChance)
                 {
-                    Append(self.gameObject.name + " #" + hits, self.gameObject.GetHashCode(), self.dropTable.GenerateDrop(self.rng), self.transform.position.x, self.transform.position.y);
+                    Append(self.gameObject.name + " #" + hits, self.gameObject.GetHashCode(), self.dropTable.GeneratePickup(self.rng).pickupIndex, self.transform.position.x, self.transform.position.y);
                     succcs++;
                 }
             }
@@ -402,16 +403,16 @@ namespace FilteredStageLogger
                 while (entries < CASINO_MAX)
                 {
                     entries++;
-                    Append(self.gameObject.name + " #" + entries, self.gameObject.GetHashCode(), self.dropTable.GenerateDrop(self.rng), self.transform.position.x, self.transform.position.y);
+                    Append(self.gameObject.name + " #" + entries, self.gameObject.GetHashCode(), self.dropTable.GeneratePickup(self.rng).pickupIndex, self.transform.position.x, self.transform.position.y);
                 }
                 self.rng.state0 = state0;
                 self.rng.state1 = state1; // reset RNG
             };
         }
 
-        private void AdaptiveOpened(On.RoR2.RouletteChestController.orig_HandleInteractionServer orig, RouletteChestController self, Interactor activator)
+        private void AdaptiveOpened(On.RoR2.RouletteChestController.orig_HandleInteractionServer_PayCostContext_PayCostResults orig, RouletteChestController self, CostTypeDef.PayCostContext payCostContext, CostTypeDef.PayCostResults payCostResults)
         {
-            orig(self, activator);
+            orig(self, payCostContext, payCostResults);
 
             if (self.previousEntryIndexClient > -1)
             {
@@ -433,9 +434,9 @@ namespace FilteredStageLogger
             if (alreadyLoggedObjs.Contains(self.gameObject.GetHashCode())) return;
             else if (newPickupIndex.isValid) alreadyLoggedObjs.Add(self.gameObject.GetHashCode());
 
-            if (self.pickupIndex == PickupCatalog.FindPickupIndex(ItemIndex.None)) return;
+            if (self.Networkpickup.pickupIndex == PickupCatalog.FindPickupIndex(ItemIndex.None)) return;
 
-            Append(self.gameObject.name, self.gameObject.GetHashCode(), self.pickupIndex, self.transform.position.x, self.transform.position.y);
+            Append(self.gameObject.name, self.gameObject.GetHashCode(), self.Networkpickup.pickupIndex, self.transform.position.x, self.transform.position.y);
         }
 
         private void LogChestRoll(On.RoR2.ChestBehavior.orig_Roll orig, ChestBehavior self)
@@ -448,7 +449,7 @@ namespace FilteredStageLogger
             if (alreadyLoggedObjs.Contains(self.gameObject.GetHashCode())) return;
             else alreadyLoggedObjs.Add(self.gameObject.GetHashCode());
 
-            Append(self.gameObject.name, self.gameObject.GetHashCode(), self.dropPickup, self.transform.position.x, self.transform.position.y);
+            Append(self.gameObject.name, self.gameObject.GetHashCode(), self.currentPickup.pickupIndex, self.transform.position.x, self.transform.position.y);
         }
 
         private void LogScavLoot(On.RoR2.ChestBehavior.orig_Start orig,  ChestBehavior self)
@@ -476,7 +477,7 @@ namespace FilteredStageLogger
                 Append(self.gameObject.name + " #" + (i+1), self.gameObject.GetHashCode(), dropPickup, self.transform.position.x, self.transform.position.y);
                 for (int j = 0; j < self.dropCount; j++)
                 {
-                    _ = self.dropTable.GenerateDrop(self.rng);
+                    _ = self.dropTable.GeneratePickup(self.rng).pickupIndex;
                 }
 
                 void Add(List<PickupIndex> source, float chance)
@@ -519,14 +520,14 @@ namespace FilteredStageLogger
                 if (self.name == "SuperRoboBallEncounter")
                 {
                     ulong state0 = self.rng.state0, state1 = self.rng.state1;
-                    Append("AlloyWorshipUnit", self.gameObject.GetHashCode(), self.dropTable.GenerateDrop(self.rng), self.gameObject.transform.position.x, self.gameObject.transform.position.y);
+                    Append("AlloyWorshipUnit", self.gameObject.GetHashCode(), self.dropTable.GeneratePickup(self.rng).pickupIndex, self.gameObject.transform.position.x, self.gameObject.transform.position.y);
                     self.rng.state0 = state0;
                     self.rng.state1 = state1; // reset RNG
                 }
                 else if (self.name.Contains("Teleporter"))
                 {
                     ulong state0 = self.rng.state0, state1 = self.rng.state1;
-                    PickupIndex tpGreen = self.dropTable.GenerateDrop(self.rng);
+                    PickupIndex tpGreen = self.dropTable.GeneratePickup(self.rng).pickupIndex;
                     List<PickupDropTable> dropTable = new List<PickupDropTable>();
                     dropTable.Add(self.dropTable);
                     bool flag2 = dropTable != null && dropTable.Count > 0;
@@ -536,7 +537,7 @@ namespace FilteredStageLogger
                         if (i > 0)
                         {
                             source = $"Mountain #{i}";
-                            self.dropTable.GenerateDropPreReplacement(self.rng);
+                            self.dropTable.GeneratePickupPreReplacement(self.rng);
                         }
                         if (self.rng.nextNormalizedFloat <= self.bossDropChance)
                         {
@@ -545,7 +546,7 @@ namespace FilteredStageLogger
                                 PickupDropTable pickupDropTable = self.rng.NextElementUniform(dropTable);
                                 if (pickupDropTable != null)
                                 {
-                                    _ = pickupDropTable.GenerateDrop(self.rng);
+                                    _ = pickupDropTable.GeneratePickup(self.rng);
                                 }
                             }
                             else
